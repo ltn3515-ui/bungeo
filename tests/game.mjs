@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import {initial,readSave,hireStaff,receiveSale,receiveStaffSale,missOrders,customer,orderWindow,orderTime,bakeProfiles,bakeStep,isReady,isPerfect,isBurned,flavors,spawnInterval,staffCosts,STAFF_POINTS,MISS_PENALTY} from '../src/game.ts';
+import {initial,readSave,hireStaff,receiveSale,receiveStaffSale,missOrders,spendScore,streakLevel,customer,orderWindow,orderTime,bakeProfiles,bakeStep,isReady,isPerfect,isBurned,flavors,spawnInterval,staffCosts,STAFF_POINTS,MISS_PENALTY,PERFECT_BONUS,PACE_COST,QUICK_BAKE_COST} from '../src/game.ts';
 const prior={...initial(),coins:10000,branches:3,selectedBranch:2};
-delete prior.staff;delete prior.assisted;delete prior.missed;
+delete prior.staff;delete prior.assisted;delete prior.missed;delete prior.streak;
 const migrated=readSave(prior);
 assert.deepEqual(migrated.staff,[]);
 assert.equal(migrated.selectedBranch,2);
 assert.equal(migrated.coins,10000);
+assert.equal(migrated.streak,0,'existing saves start with no streak');
 assert.equal(hireStaff(migrated,3),null,'closed branch cannot hire');
 const hired=hireStaff(migrated,1);
 assert.ok(hired);
@@ -13,15 +14,18 @@ assert.equal(hired.coins,10000-staffCosts[1]);
 assert.deepEqual(hired.staff,[1]);
 assert.equal(hireStaff(hired,1),null,'cannot hire twice');
 const manual=receiveSale(hired,true);
-assert.equal(manual.weeklyScore,140);
+assert.equal(manual.weeklyScore,100+PERFECT_BONUS);
+assert.equal(manual.streak,1);
 const assisted=receiveStaffSale(manual);
-assert.equal(assisted.weeklyScore,140+STAFF_POINTS);
+assert.equal(assisted.weeklyScore,100+PERFECT_BONUS+STAFF_POINTS);
+assert.equal(assisted.streak,1,'staff work does not build a manual streak');
 assert.equal(assisted.assisted,1);
 assert.equal(assisted.served,2);
 assert.ok(assisted.coins>manual.coins);
 const missed=missOrders(assisted,4);
 assert.equal(missed.weeklyScore,0,'penalty must clamp score to zero');
 assert.equal(missed.missed,4);
+assert.equal(missed.streak,0,'a missed order breaks the streak');
 assert.equal(MISS_PENALTY,60);
 assert.ok(orderWindow(8)<orderWindow(1));
 assert.ok(spawnInterval(8)<spawnInterval(1));
@@ -32,6 +36,24 @@ assert.ok(orderTime(3,'팥')>orderTime(3,'초코'));
 assert.ok(orderTime(3,'초코')>orderTime(3,'슈크림'));
 assert.ok(bakeStep('슈크림',0)>bakeStep('초코',0));
 assert.ok(bakeStep('초코',0)>bakeStep('팥',0));
+assert.ok(bakeProfiles['슈크림'].perfectStart/bakeProfiles['슈크림'].burn<bakeProfiles['팥'].perfectStart/bakeProfiles['팥'].burn);
+assert.ok(bakeProfiles['팥'].perfectStart/bakeProfiles['팥'].burn<bakeProfiles['초코'].perfectStart/bakeProfiles['초코'].burn);
+let streakSave=initial();
+for(let i=0;i<9;i++)streakSave=receiveSale(streakSave,false);
+assert.equal(streakLevel(streakSave.streak),0);
+streakSave=receiveSale(streakSave,true);
+assert.equal(streakSave.streak,10);
+assert.equal(streakLevel(streakSave.streak),1);
+assert.ok(bakeStep('팥',0,10)>bakeStep('팥',0,9));
+assert.ok(bakeStep('팥',0,10,'fast')>bakeStep('팥',0,10,'normal'));
+assert.ok(bakeStep('팥',0,10,'slow')<bakeStep('팥',0,10,'normal'));
+assert.equal(streakLevel(50),streakLevel(500));
+const paid=spendScore(streakSave,PACE_COST);
+assert.equal(paid.weeklyScore,streakSave.weeklyScore-PACE_COST);
+assert.equal(spendScore({...streakSave,weeklyScore:QUICK_BAKE_COST-1},QUICK_BAKE_COST),null);
+assert.equal(spendScore({...streakSave,weeklyScore:QUICK_BAKE_COST},QUICK_BAKE_COST).weeklyScore,0);
+assert.equal(missOrders(streakSave).streak,0);
+assert.equal(readSave({...streakSave,streak:99999999}).streak,streakSave.served);
 for(const flavor of flavors){
   const profile=bakeProfiles[flavor];
   assert.ok(profile.ready<profile.perfectStart);
@@ -43,14 +65,14 @@ for(const flavor of flavors){
   assert.ok(isPerfect(flavor,profile.perfectEnd));
   assert.ok(!isPerfect(flavor,profile.perfectEnd+1));
   assert.ok(isBurned(flavor,profile.burn));
-  for(let oven=0;oven<=4;oven++){
+  for(let oven=0;oven<=4;oven++)for(const pace of ['slow','normal','fast'])for(const streak of [0,50]){
     let heat=0,perfect=false;
     while(!isBurned(flavor,heat)){
-      heat+=bakeStep(flavor,oven);
+      heat+=bakeStep(flavor,oven,streak,pace);
       perfect ||= isPerfect(flavor,heat);
     }
-    assert.ok(perfect,`${flavor} level ${oven} must have a playable perfect window`);
+    assert.ok(perfect,`${flavor} level ${oven} ${pace} streak ${streak} must have a playable perfect window`);
   }
 }
 assert.deepEqual(readSave({...hired,staff:[1,1,2,42,-1,1.5]}).staff,[1,2]);
-console.log('saves, staff, penalties, distinct recipes and all oven levels: passed');
+console.log('saves, staff, score costs, streak acceleration, distinct recipes and all oven levels: passed');
