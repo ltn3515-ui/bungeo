@@ -1,0 +1,15 @@
+{
+  "name": "내 동네 붕어빵 타이쿤",
+  "short_name": "붕어빵 타이쿤",
+  "description": "동네 골목에서 붕어빵 가게를 키우는 작은 타이쿤 게임",
+  "lang": "ko",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fff5e6",
+  "theme_color": "#f9f0dd",
+  "icons": [
+    {"src":"/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},
+    {"src":"/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
